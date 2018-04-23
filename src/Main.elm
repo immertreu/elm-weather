@@ -1,8 +1,8 @@
 module Main exposing (..)
 
-import Html exposing (Html, div, input, text)
+import Html exposing (Html, div, input, text, button)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onInput)
+import Html.Events exposing (onInput, onClick)
 import Http
 import Jsonp
 import Task exposing (Task)
@@ -15,18 +15,24 @@ type alias Model =
     { position : Position
     , error : Error
     , temperature : Float
+    , city : City
+    , submittedCity : City
+    , test : String
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model (Position 0.0 0.0) (Error 0 "") 0.0, Cmd.none )
+    ( Model (Position 0.0 0.0) (Error 0 "") 0.0 "" "" "", Cmd.none )
 
 
 type Msg
     = NewPositionMsg Position
     | NewErrorMsg Error
     | NewTemperature (Result Http.Error Float)
+    | NewPosition (Result Http.Error String)
+    | NewCity City
+    | NewCitySubmitted City
 
 
 subscriptions : Model -> Sub Msg
@@ -52,12 +58,26 @@ update msg model =
         NewTemperature (Err _) ->
             model ! []
 
+        NewPosition (Ok test) ->
+            ( { model | test = test }, Cmd.none )
 
-view : Model -> Html a
+        NewPosition (Err _) ->
+            model ! []
+
+        NewCity city ->
+            ( { model | city = city }, Cmd.none )
+
+        NewCitySubmitted city ->
+            ( { model | submittedCity = city }, Task.attempt NewPosition (getNewPosition city) )
+
+
+view : Model -> Html Msg
 view model =
     div []
-        [ input [ placeholder "City", onInput Change ] []
-        , div [] [ text ("City: " ++ "Chicago") ]
+        [ input [ placeholder "City", onInput NewCity ] []
+        , button [ onClick (NewCitySubmitted model.city) ] [ text "Get Forecast" ]
+        , div [] [ text ("Test: " ++ toString model.test) ]
+        , div [] [ text ("City: " ++ toString model.submittedCity) ]
         , div [] [ text ("Latitude: " ++ toString model.position.latitude) ]
         , div [] [ text ("Longitude: " ++ toString model.position.longitude) ]
         , div [] [ text ("temperature: " ++ toString model.temperature) ]
@@ -74,9 +94,15 @@ main =
         }
 
 
-getCoordinates: City -> String
-getCoordinates: City -> String = 
-    "Texas"
+getNewPosition : City -> Task Http.Error String
+getNewPosition city =
+    Jsonp.get decodePosition ("https://maps.googleapis.com/maps/api/geocode/json?address=" ++ city ++ "&key=APIKEY")
+
+
+decodePosition : Decode.Decoder String
+decodePosition =
+    Decode.at [ "status" ] Decode.string
+
 
 getTemperature : Position -> Task Http.Error Float
 getTemperature position =
